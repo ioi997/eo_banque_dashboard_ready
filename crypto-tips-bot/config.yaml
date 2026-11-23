@@ -15,6 +15,8 @@ settings:
   currency: USD
   top_n: 3                # how many "best setups" to highlight
   min_history_days: 210   # need ~200 days for the SMA200
+  strategy: v1            # v1 = original rules, v2 = safer rules (see README)
+  regime_asset: BTC-USD   # v2 crypto switch: crypto buys only while this is above its 50-day average
 
 assets:
   # ---------- Crypto ----------

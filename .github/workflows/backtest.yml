@@ -8,9 +8,9 @@ on:
       - ".github/workflows/backtest.yml"
   workflow_dispatch:
     inputs:
-      days:
-        description: "How many past days to test"
-        default: "30"
+      periods:
+        description: "Periods to test, in days (comma separated)"
+        default: "30,90,180"
       capital:
         description: "Starting capital (USD)"
         default: "1000"
@@ -34,11 +34,11 @@ jobs:
           cache-dependency-path: crypto-tips-bot/requirements.txt
       - run: pip install -r requirements.txt
       - name: Run backtest
-        run: python bot/backtest.py --days ${{ inputs.days || '30' }} --capital ${{ inputs.capital || '1000' }}
+        run: python bot/backtest.py --periods ${{ inputs.periods || '30,90,180' }} --capital ${{ inputs.capital || '1000' }}
       - name: Post result as an issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh label create backtest --color 5319E7 --force
-          gh issue create --title "🧪 Backtest last ${{ inputs.days || '30' }} days ($(date -u +%F))" \
+          gh issue create --title "🧪 Backtest v1 vs v2 (${{ inputs.periods || '30,90,180' }} days) ($(date -u +%F))" \
             --body-file backtest.md --label backtest

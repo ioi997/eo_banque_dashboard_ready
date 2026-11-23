@@ -172,7 +172,15 @@ def pct(a: float, b: float) -> float:
     return (a / b - 1) * 100 if b else 0.0
 
 
-def analyse(asset: dict, df: pd.DataFrame) -> Signal:
+def crypto_regime_ok(btc: pd.DataFrame | None) -> bool:
+    """v2 crypto switch: crypto buys allowed only while Bitcoin is above its 50-day average."""
+    if btc is None or len(btc) < 50:
+        return True
+    c = btc["Close"]
+    return bool(c.iloc[-1] > c.rolling(50).mean().iloc[-1])
+
+
+def analyse(asset: dict, df: pd.DataFrame, strategy: str = "v2", regime_ok: bool = True) -> Signal:
     c = df["Close"]
     sma50, sma200 = c.rolling(50).mean(), c.rolling(200).mean()
     r = rsi(c)
@@ -183,6 +191,9 @@ def analyse(asset: dict, df: pd.DataFrame) -> Signal:
     last_rsi = float(r.iloc[-1])
     up_long = price > sma200.iloc[-1]
     golden = sma50.iloc[-1] > sma200.iloc[-1]
+
+    if strategy == "v2":
+        return _analyse_v2(asset, df, c, sma50, sma200, r, h, a, price, last_rsi, up_long, golden, regime_ok)
 
     score, reasons, alerts = 0, [], []
 
@@ -215,6 +226,52 @@ def analyse(asset: dict, df: pd.DataFrame) -> Signal:
     elif last_rsi > 70:
         score -= 1; reasons.append(f"overbought (RSI {last_rsi:.0f})")
 
+    return _finish(asset, df, c, sma50, sma200, r, a, price, last_rsi, score, reasons, alerts)
+
+
+def _analyse_v2(asset, df, c, sma50, sma200, r, h, a, price, last_rsi, up_long, golden, regime_ok) -> Signal:
+    """v2: trend following with falling-knife guards, crypto switch and RSI bounce."""
+    score, reasons, alerts = 0, [], []
+
+    score += 1 if up_long else -1
+    reasons.append("above 200-day average" if up_long else "below 200-day average")
+    score += 1 if golden else -1
+    reasons.append("50d above 200d" if golden else "50d below 200d")
+
+    if h.iloc[-1] > 0 and h.iloc[-1] > h.iloc[-2]:
+        score += 1; reasons.append("momentum improving")
+    elif h.iloc[-1] < 0 and h.iloc[-1] < h.iloc[-2]:
+        score -= 1; reasons.append("momentum fading")
+
+    # RSI: buy the bounce, not the fall
+    recent = r.iloc[-4:]
+    bounced = any(recent.iloc[i - 1] < 30 <= recent.iloc[i] for i in range(1, len(recent)))
+    if bounced:
+        score += 2; reasons.append(f"RSI bounced back above 30 (RSI {last_rsi:.0f})")
+    elif last_rsi < 30:
+        reasons.append(f"oversold (RSI {last_rsi:.0f}), wait for a bounce")
+    elif last_rsi > 80:
+        score -= 2; reasons.append(f"very overbought (RSI {last_rsi:.0f}), don't chase")
+    elif last_rsi > 70:
+        score -= 1; reasons.append(f"overbought (RSI {last_rsi:.0f})")
+
+    # Guards: never a buy signal when one of these is true
+    guards = []
+    if price < sma50.iloc[-1]:
+        guards.append("below 50-day average (falling knife)")
+    ret10 = pct(price, float(c.iloc[-11])) if len(c) > 11 else 0.0
+    if ret10 < -10:
+        guards.append(f"down {abs(ret10):.0f}% in 2 weeks")
+    if asset["type"] == "crypto" and not regime_ok:
+        guards.append("crypto switch off (Bitcoin below its 50-day average)")
+    if guards:
+        score = min(score, 0)
+        reasons += guards
+
+    return _finish(asset, df, c, sma50, sma200, r, a, price, last_rsi, score, reasons, alerts)
+
+
+def _finish(asset, df, c, sma50, sma200, r, a, price, last_rsi, score, reasons, alerts) -> Signal:
     # Event alerts over the last 5 sessions
     cross = (sma50 > sma200).astype(int).diff().iloc[-5:]
     if (cross == 1).any():
@@ -367,16 +424,22 @@ def main() -> int:
     settings = cfg.get("settings", {})
     min_days = int(settings.get("min_history_days", 210))
     top_n = int(settings.get("top_n", 3))
+    strategy = settings.get("strategy", "v2")
     today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+
+    data = {a["name"]: get_history(a) for a in cfg["assets"]}
+    btc = next((data[a["name"]] for a in cfg["assets"]
+                if a.get("yahoo") == settings.get("regime_asset", "BTC-USD")), None)
+    regime = crypto_regime_ok(btc)
 
     signals, failed = [], []
     for asset in cfg["assets"]:
-        df = get_history(asset)
+        df = data[asset["name"]]
         if df is None or len(df) < min_days:
             failed.append(asset["name"])
             continue
         try:
-            signals.append(analyse(asset, df))
+            signals.append(analyse(asset, df, strategy, regime))
             print(f"OK  {asset['name']}")
         except Exception as e:  # noqa: BLE001
             print(f"ERR {asset['name']}: {e}", file=sys.stderr)
