@@ -1,0 +1,54 @@
+name: Daily market tips
+
+on:
+  schedule:
+    # 06:30 UTC = 07:30 Paris in winter, 08:30 in summer. Runs every day (crypto never closes).
+    - cron: "30 6 * * *"
+  workflow_dispatch: {}   # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write   # to commit the daily report into reports/
+  issues: write     # to post the report as an issue (GitHub emails you)
+
+defaults:
+  run:
+    working-directory: crypto-tips-bot
+
+jobs:
+  tips:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crypto-tips-bot/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate tips
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot/main.py
+
+      - name: Post report as a GitHub issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create daily-tips --color 0E8A16 --force
+          # close yesterday's report so only today's stays open
+          gh issue list --label daily-tips --state open --json number -q '.[].number' \
+            | xargs -r -n1 gh issue close
+          gh issue create --title "📈 Daily tips $(date -u +%F)" --body-file report.md --label daily-tips
+
+      - name: Save report history
+        run: |
+          git config user.name  "tips-bot"
+          git config user.email "tips-bot@users.noreply.github.com"
+          git add reports/
+          git commit -m "Daily report $(date -u +%F)" || echo "Nothing to commit"
+          git push

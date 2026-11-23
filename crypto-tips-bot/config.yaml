@@ -1,0 +1,80 @@
+# Watchlist for the daily tips bot.
+# Each asset needs:
+#   name      : label shown in the report
+#   type      : crypto | etf
+#   yahoo     : Yahoo Finance symbol (main data source)
+#   coingecko : CoinGecko id (fallback for crypto)
+#   stooq     : Stooq symbol (fallback for ETFs)
+#   trade_as  : how YOU actually trade it (tokenized version, exchange...). Free text, edit freely.
+#
+# Signals are computed on the underlying asset price. Tokenized versions
+# (Ondo, bStocks, xStocks) track these prices but can trade at a small premium
+# or discount on DEXs, so always check the live pool price before buying.
+
+settings:
+  currency: USD
+  top_n: 3                # how many "best setups" to highlight
+  min_history_days: 210   # need ~200 days for the SMA200
+
+assets:
+  # ---------- Crypto ----------
+  - name: Bitcoin
+    type: crypto
+    yahoo: BTC-USD
+    coingecko: bitcoin
+    trade_as: BTCB on BSC / Binance spot
+
+  - name: Ethereum
+    type: crypto
+    yahoo: ETH-USD
+    coingecko: ethereum
+    trade_as: ETH on BSC / Binance spot
+
+  - name: BNB
+    type: crypto
+    yahoo: BNB-USD
+    coingecko: binancecoin
+    trade_as: BNB (MetaMask / Binance)
+
+  - name: Solana
+    type: crypto
+    yahoo: SOL-USD
+    coingecko: solana
+    trade_as: Binance spot
+
+  - name: Ondo
+    type: crypto
+    yahoo: ONDO-USD
+    coingecko: ondo-finance
+    trade_as: ONDO on BSC / Binance spot
+
+  # ---------- ETFs (underlying of the tokenized versions) ----------
+  - name: S&P 500
+    type: etf
+    yahoo: SPY
+    stooq: spy.us
+    trade_as: Ondo tokenized SPY (check exact ticker on PancakeSwap)
+
+  - name: Nasdaq 100
+    type: etf
+    yahoo: QQQ
+    stooq: qqq.us
+    trade_as: Ondo tokenized QQQ (check exact ticker on PancakeSwap)
+
+  - name: Gold
+    type: etf
+    yahoo: GLD
+    stooq: gld.us
+    trade_as: Ondo tokenized GLD (check exact ticker on PancakeSwap)
+
+  - name: Bitcoin ETF (IBIT)
+    type: etf
+    yahoo: IBIT
+    stooq: ibit.us
+    trade_as: Tokenized IBIT if available on BSC
+
+  - name: Semiconductors
+    type: etf
+    yahoo: SMH
+    stooq: smh.us
+    trade_as: Tokenized SMH if available on BSC

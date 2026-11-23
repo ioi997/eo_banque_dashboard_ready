@@ -1,0 +1,44 @@
+name: Backtest
+
+on:
+  push:
+    paths:
+      - "crypto-tips-bot/bot/**"
+      - "crypto-tips-bot/config.yaml"
+      - ".github/workflows/backtest.yml"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many past days to test"
+        default: "30"
+      capital:
+        description: "Starting capital (USD)"
+        default: "1000"
+
+permissions:
+  issues: write
+
+defaults:
+  run:
+    working-directory: crypto-tips-bot
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crypto-tips-bot/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run backtest
+        run: python bot/backtest.py --days ${{ inputs.days || '30' }} --capital ${{ inputs.capital || '1000' }}
+      - name: Post result as an issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create backtest --color 5319E7 --force
+          gh issue create --title "🧪 Backtest last ${{ inputs.days || '30' }} days ($(date -u +%F))" \
+            --body-file backtest.md --label backtest
