@@ -1,0 +1,36 @@
+name: Optimize
+
+on:
+  push:
+    paths:
+      - "crypto-tips-bot/bot/optimize.py"
+      - ".github/workflows/optimize.yml"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+defaults:
+  run:
+    working-directory: crypto-tips-bot
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crypto-tips-bot/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run walk-forward optimisation
+        run: python bot/optimize.py
+      - name: Post result as an issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create optimize --color FBCA04 --force
+          gh issue create --title "⚙️ Optimisation walk-forward ($(date -u +%F))" \
+            --body-file optimize.md --label optimize
